@@ -22,15 +22,18 @@ annotator_dl_urls = {
     "upernet_global_small.pth": "https://huggingface.co/lllyasviel/ControlNet/resolve/main/annotator/ckpts/upernet_global_small.pth",
 }
 
+
 def download_model(model_name, urls_map):
     """
     Download model from huggingface with wget and save to models directory
     """
     model_url = urls_map[model_name]
-    relative_path_to_model = model_url.replace("https://huggingface.co/lllyasviel/ControlNet/resolve/main/", "")
+    relative_path_to_model = model_url.replace(
+        "https://huggingface.co/lllyasviel/ControlNet/resolve/main/", "")
     if not os.path.exists(relative_path_to_model):
         print(f"Downloading {model_name}...")
         call(["wget", "-O", relative_path_to_model, model_url])
+
 
 def get_state_dict_path(model_name):
     """

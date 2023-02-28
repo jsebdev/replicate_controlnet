@@ -4,7 +4,7 @@
 from cog import BasePredictor, Input, Path
 import os
 from subprocess import call
-from cldm.model import create_model, load_state_dict
+from cldm.model import create_model, load_state_dict, load_model_from_config
 from ldm.models.diffusion.ddim import DDIMSampler
 from PIL import Image
 import numpy as np
@@ -30,12 +30,13 @@ elif MODEL_TYPE == "seg":
 elif MODEL_TYPE == "openpose":
     from gradio_pose2image import process_pose
 
+
 class Predictor(BasePredictor):
     def setup(self):
         """Load the model into memory to make running multiple predictions efficient"""
-        self.model = create_model('./models/cldm_v15.yaml').cuda()
-        self.model.load_state_dict(load_state_dict(get_state_dict_path(MODEL_TYPE), location='cuda'))
-        self.ddim_sampler = DDIMSampler(self.model)
+        self.config_path = './models/cldm_v15.yaml'
+        # self.model = create_model(self.config_path).cuda()
+        # self.model.load_state_dict(load_state_dict(get_state_dict_path(MODEL_TYPE), location='cuda'))
 
     def predict(
         self,
@@ -48,23 +49,41 @@ class Predictor(BasePredictor):
         ),
         image_resolution: str = Input(
             description="Image resolution to be generated",
-            choices = ['256', '512', '768'],
+            choices=['256', '512', '768'],
             default='512'
         ),
-        low_threshold: int = Input(description="Canny line detection low threshold", default=100, ge=1, le=255), # only applicable when model type is 'canny'
-        high_threshold: int = Input(description="Canny line detection high threshold", default=200, ge=1, le=255), # only applicable when model type is 'canny'
+        # only applicable when model type is 'canny'
+        low_threshold: int = Input(
+            description="Canny line detection low threshold", default=100, ge=1, le=255),
+        # only applicable when model type is 'canny'
+        high_threshold: int = Input(
+            description="Canny line detection high threshold", default=200, ge=1, le=255),
         ddim_steps: int = Input(description="Steps", default=20),
-        scale: float = Input(description="Scale for classifier-free guidance", default=9.0, ge=0.1, le=30.0),
+        scale: float = Input(
+            description="Scale for classifier-free guidance", default=9.0, ge=0.1, le=30.0),
         seed: int = Input(description="Seed", default=None),
-        eta: float = Input(description="Controls the amount of noise that is added to the input data during the denoising diffusion process. Higher value -> more noise", default=0.0),
-        a_prompt: str = Input(description="Additional text to be appended to prompt", default="best quality, extremely detailed"),
-        n_prompt: str = Input(description="Negative Prompt", default="longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality"),
-        detect_resolution: int = Input(description="Resolution at which detection method will be applied)", default=512, ge=128, le=1024), # only applicable when model type is 'HED', 'seg', or 'MLSD'
+        eta: float = Input(
+            description="Controls the amount of noise that is added to the input data during the denoising diffusion process. Higher value -> more noise", default=0.0),
+        a_prompt: str = Input(description="Additional text to be appended to prompt",
+                              default="best quality, extremely detailed"),
+        n_prompt: str = Input(description="Negative Prompt",
+                              default="longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality"),
+        detect_resolution: int = Input(description="Resolution at which detection method will be applied)",
+                                       default=512, ge=128, le=1024),  # only applicable when model type is 'HED', 'seg', or 'MLSD'
+        ckpt: str = Input(
+            description="path to checkpoint of model", default=None)
         # bg_threshold: float = Input(description="Background Threshold (only applicable when model type is 'normal')", default=0.0, ge=0.0, le=1.0), # only applicable when model type is 'normal'
         # value_threshold: float = Input(description="Value Threshold (only applicable when model type is 'MLSD')", default=0.1, ge=0.01, le=2.0), # only applicable when model type is 'MLSD'
         # distance_threshold: float = Input(description="Distance Threshold (only applicable when model type is 'MLSD')", default=0.1, ge=0.01, le=20.0), # only applicable when model type is 'MLSD'
     ) -> List[Path]:
         """Run a single prediction on the model"""
+        if ckpt is None:
+            self.model = create_model(self.config_path).cuda()
+            self.model.load_state_dict(load_state_dict(
+                get_state_dict_path(MODEL_TYPE), location='cuda'))
+        else:
+            self.model = load_model_from_config(self.config_path, ckpt)
+        self.ddim_sampler = DDIMSampler(self.model)
         num_samples = int(num_samples)
         image_resolution = int(image_resolution)
         if not seed:
@@ -207,10 +226,11 @@ class Predictor(BasePredictor):
                 self.model,
                 self.ddim_sampler,
             )
-        
+
         # outputs from list to PIL
         outputs = [Image.fromarray(output) for output in outputs]
         # save outputs to file
-        outputs = [output.save(f"tmp/output_{i}.png") for i, output in enumerate(outputs)]
+        outputs = [output.save(f"tmp/output_{i}.png")
+                   for i, output in enumerate(outputs)]
         # return paths to output files
         return [Path(f"tmp/output_{i}.png") for i in range(len(outputs))]
